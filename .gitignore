@@ -2,6 +2,12 @@
 __pycache__/
 *.py[codz]
 *$py.class
+.venv/
+*.pyc
+data/raw/
+data/processed/train_data.csv
+
+
 
 # C extensions
 *.so
