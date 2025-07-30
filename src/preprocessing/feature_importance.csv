@@ -1,0 +1,11 @@
+feature,importance
+station_encoded,0.2101653
+tmp_encoded,0.14515859
+year,0.13040164
+dayofyear,0.12942323
+month,0.10709264
+dayofweek,0.0810977
+day,0.071098424
+hour,0.06233331
+longitude,0.041613482
+latitude,0.021615665
