@@ -38,7 +38,7 @@ The core of our solution is a machine learning pipeline utilizing ****, to predi
 
 ```bash
 pip install -r requirements.txt
-
+```
 ### 📊 Exploratory Data Analysis
 
 
