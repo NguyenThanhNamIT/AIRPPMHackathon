@@ -43,3 +43,4 @@ r2 = r2_score(y_test, y_pred)
 print(f"MAE:  {mae:.3f}")
 print(f"RMSE: {rmse:.3f}")
 print(f"R²:   {r2:.3f}")
+
