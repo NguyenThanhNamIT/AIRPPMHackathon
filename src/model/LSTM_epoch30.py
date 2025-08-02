@@ -3,7 +3,7 @@ import pandas as pd
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Input, LSTM, Dense, Dropout
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
+from tensorflow.keras.callbacks import ModelCheckpoint
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import matplotlib.pyplot as plt
 import os
@@ -14,15 +14,11 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
 
 # Load the preprocessed LSTM data
-try:
-    X_train_lstm = np.load("../../data/lstm_data/X_train_lstm.npy")
-    X_test_lstm = np.load("../../data/lstm_data/X_test_lstm.npy")
-    y_train_lstm = np.load("../../data/lstm_data/y_train_lstm.npy")
-    y_test_lstm = np.load("../../data/lstm_data/y_test_lstm.npy")
-    print("Data loaded successfully. Shapes:", X_train_lstm.shape, X_test_lstm.shape)
-except Exception as e:
-    print(f"Error loading data: {str(e)}")
-    exit()
+X_train_lstm = np.load("../../data/lstm_data/X_train_lstm.npy")
+X_test_lstm = np.load("../../data/lstm_data/X_test_lstm.npy")
+y_train_lstm = np.load("../../data/lstm_data/y_train_lstm.npy")
+y_test_lstm = np.load("../../data/lstm_data/y_test_lstm.npy")
+print("Data loaded successfully. Shapes:", X_train_lstm.shape, X_test_lstm.shape)
 
 # Define the LSTM model
 def build_lstm_model(input_shape):
@@ -42,32 +38,27 @@ def build_lstm_model(input_shape):
 input_shape = (X_train_lstm.shape[1], X_train_lstm.shape[2])
 model = build_lstm_model(input_shape)
 
-# Define callbacks for best checkpoint and early stopping
+# Define callback for best checkpoint only
 checkpoint = ModelCheckpoint(
-    filepath='../../models/lstm_best_model_epoch30.h5',  # Lưu mô hình tốt nhất
+    filepath='../models/lstm_model_epoch30.h5',  # Lưu mô hình tốt nhất
     monitor='val_loss',
     save_best_only=True,  # Chỉ lưu mô hình có val_loss thấp nhất
     save_freq='epoch',
     verbose=1
 )
-early_stopping = EarlyStopping(
-    monitor='val_loss',
-    patience=5,
-    restore_best_weights=True,
-    verbose=1
-)
 
-# Train the model
+# Train the model (without EarlyStopping)
 print("Starting training...")
 history = model.fit(
     X_train_lstm, y_train_lstm,
-    epochs=30,  # Đặt epoch = 30 như yêu cầu
+    epochs=30,  # Chạy đủ 30 epoch
     batch_size=32,
     validation_split=0.2,
     verbose=1,
-    callbacks=[checkpoint, early_stopping]
+    callbacks=[checkpoint]
 )
 print("Training completed.")
+print(f"Final val_loss: {history.history['val_loss'][-1]}")
 
 # Evaluate the model
 y_pred_lstm = model.predict(X_test_lstm)
@@ -101,11 +92,5 @@ plt.legend()
 plt.show()
 
 # Save the final model
-try:
-    model.save("../../models/lstm_model_epoch30.h5")
-    print("Final model saved successfully at ../../models/lstm_model.h5")
-except Exception as e:
-    print(f"Error saving final model: {str(e)}")
-    print("Attempting to save in current directory...")
-    model.save("lstm_model_epoch30.h5")
-    print("Final model saved successfully in current directory as lstm_model.h5")
+model.save("../models/lstm_model.h5")
+print("Final model saved successfully at ../models/lstm_model.h5")

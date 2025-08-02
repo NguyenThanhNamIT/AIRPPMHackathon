@@ -11,7 +11,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
 
 # Đường dẫn checkpoint (mô hình tốt nhất)
-checkpoint_path = "../../models/lstm_best_model_epoch30.h5"
+checkpoint_path = "../../models/lstm_model_epoch30.h5"
 print(f"Checking path: {os.path.abspath(checkpoint_path)}")
 
 # Kiểm tra file tồn tại
