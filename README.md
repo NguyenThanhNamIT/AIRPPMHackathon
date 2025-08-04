@@ -51,7 +51,7 @@ pip install -r requirements.txt
 
 ## 🧾 Conclusion
 
-This project successfully developed an air quality prediction framework for **Ho Chi Minh City**, integrating data visualization as a core component of the machine learning pipeline. The study combined robust data preprocessing, feature engineering, and XGBoost-based modeling to address environmental data analysis challenges.
+This project successfully developed an air quality prediction framework for **Poland**, integrating data visualization as a core component of the machine learning pipeline. The study combined robust data preprocessing, feature engineering, and XGBoost-based modeling to address environmental data analysis challenges.
 
 ### 🔑 Key Achievements:
 
@@ -59,4 +59,4 @@ This project successfully developed an air quality prediction framework for **Ho
 - **Visualization-Driven Workflow**: Applied comprehensive visualization throughout the pipeline, ensuring data quality and providing interpretable insights for stakeholders.
 - **Predictive Modeling**: Deployed optimized XGBoost regression, achieving reliable PM10 forecasting through early stopping and regularization techniques.
 
-This framework bridges complex machine learning analyses with actionable environmental health decisions, supporting public health officials and urban planners in **Vietnam's dynamic urban environment**.
+This framework bridges complex machine learning analyses with actionable environmental health decisions, supporting public health officials and urban planners in **Poland's dynamic urban environment**.
