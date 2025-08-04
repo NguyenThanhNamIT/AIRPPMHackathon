@@ -5,7 +5,7 @@
 | Name                  | Description             |
 | --------------------- | ----------------------- |
 | Nguyen Thanh Nam      | Team Leader, IU student |
-| Hoang Ngoc Quyanh Anh | IU student              |
+| Hoang Ngoc Quynh Anh | IU student              |
 | Nguyen Thanh Hung     | IU student              |
 | Tran Le Bao Ngoc      | IU student              |
 
