@@ -1,19 +1,16 @@
-# Use official Python runtime as a parent image
 FROM python:3.9-slim
 
-# Set working directory
 WORKDIR /app
 
-# Copy the forecasting script into the container
-COPY main.py .
-
-
-# Install system dependencies required by osmium
-RUN apt-get update && apt-get install -y libexpat1 && rm -rf /var/lib/apt/lists/*
-
 COPY requirements.txt .
+
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Default command: run the forecast script.
-# It will pick up the --data-file, --landuse-pbf, and --output-file args from Docker run.
+COPY main.py .
+COPY models/xgboost_pm10_model.joblib ./models/
+COPY data/xgboost_data/scaler.joblib ./data/xgboost_data/
+COPY data/xgboost_data/scaler_y.joblib ./data/xgboost_data/
+COPY data/xgboost_data/feature_names.json ./data/xgboost_data/
+
 ENTRYPOINT ["python", "main.py"]
+CMD ["--data-file", "/data/data.json", "--landuse-pbf", "/data/landuse.pbf", "--output-file", "/data/output.json"]

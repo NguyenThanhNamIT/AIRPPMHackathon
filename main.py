@@ -81,25 +81,141 @@ class LanduseHandler(osmium.SimpleHandler):
             })
 
 
-def predict_pm10(base_time, history, landuse_data, hours=24):
-    """
-    Placeholder function to generate a PM10 forecast for a target location.
-    - base_time: datetime from which to start predictions
-    - history: list of historical PM10 records (unused in this placeholder)
-    - landuse_data: optional landuse info (unused in this placeholder)
-    - hours: number of hourly predictions to generate
-    Returns a list of dictionaries with 'timestamp' and 'pm10_pred'.
-    """
+def parse_metar_weather(weather_record):
+    """Parse METAR-style weather data into features."""
+    features = {
+        "temperature": 0.0,
+        "wind_direction": 0.0,
+        "wind_speed": 0.0,
+        "dew_point": 0.0,
+        "visibility": 0.0,
+        "sea_level_pressure": 0.0
+    }
+    if not weather_record:
+        return features
+    try:
+        tmp = weather_record.get("tmp", "0,0")
+        features["temperature"] = float(tmp.replace(",", ".")) if tmp else 0.0
+        wnd = weather_record.get("wnd", "0,0,N,0,0")
+        wnd_parts = wnd.split(",")
+        features["wind_direction"] = float(wnd_parts[0]) if wnd_parts[0].isdigit() else 0.0
+        features["wind_speed"] = float(wnd_parts[3].replace(",", ".")) if len(wnd_parts) > 3 else 0.0
+        dew = weather_record.get("dew", "0,0")
+        features["dew_point"] = float(dew.replace(",", ".")) if dew else 0.0
+        vis = weather_record.get("vis", "0,0")
+        features["visibility"] = float(vis.split(",")[0]) if vis else 0.0
+        slp = weather_record.get("slp", "0,0")
+        features["sea_level_pressure"] = float(slp.replace(",", ".")) if slp else 0.0
+    except Exception as e:
+        print(f"[WARNING] Error parsing weather: {e}")
+    return features
+
+def extract_landuse_features(landuse_data, target_lat, target_lon):
+    """Extract land-use features based on proximity to target location."""
+    features = {"urban_count": 0, "industrial_count": 0, "forest_count": 0}
+    if not landuse_data:
+        return features
+    for way in landuse_data.get("ways", []):
+        landuse_type = way.get("landuse", "")
+        if landuse_type == "residential":
+            features["urban_count"] += 1
+        elif landuse_type == "industrial":
+            features["industrial_count"] += 1
+        elif landuse_type == "forest":
+            features["forest_count"] += 1
+    return features
+
+def get_station_distances(target_lat, target_lon):
+    """Return distances to Krakow stations from target location."""
+    stations = {
+        "MpKrakAlKras": (50.057678, 19.926189),
+        "MpKrakBujaka": (50.010575, 19.949189),
+        "MpKrakBulwar": (50.069308, 20.053492),
+        "MpKrakOsPias": (50.098508, 20.018269),
+        "MpKrakSwoszo": (49.991442, 19.936792),
+        "MpKrakWadow": (50.100569, 20.122561),
+        "MpKrakZloRog": (50.081197, 19.895358)
+    }
+    distances = {}
+    for code, (lat, lon) in stations.items():
+        distances[f"dist_{code}"] = geodesic((target_lat, target_lon), (lat, lon)).km
+    return distances
+
+def predict_pm10(base_time, history, landuse_data, target_lat, target_lon, weather_data, hours=24):
+    """Generate 24-hour PM10 forecast using XGBoost model."""
+    try:
+        model = joblib.load("models/xgboost_pm10_model.joblib")
+        scaler = joblib.load("data/xgboost_data/scaler.joblib")
+        scaler_y = joblib.load("data/xgboost_data/scaler_y.joblib")
+        with open("data/xgboost_data/feature_names.json", "r") as f:
+            feature_names = json.load(f)["feature_names"]
+    except Exception as e:
+        raise ValueError(f"Failed to load model, scalers, or feature names: {e}")
+
+    # Convert history to DataFrame
+    history_df = pd.DataFrame(history)
+    if not history_df.empty:
+        history_df["timestamp"] = pd.to_datetime(history_df["timestamp"])
+        history_df["pm10"] = history_df["pm10"].astype(float)
+    else:
+        history_df = pd.DataFrame(columns=["timestamp", "pm10"])
+
     forecast_list = []
     for h in range(hours):
-        ts = (base_time + timedelta(hours=h)).strftime("%Y-%m-%dT%H:%MZ")
-        # Generate a random PM10 value between 0 and 100 (put your logic here)
-        # TODO: replace this random placeholder with your PM10 prediction model
-        pm10_pred = round(random.uniform(0, 100), 1)
+        forecast_time = base_time + timedelta(hours=h)
+        features = {}
+        # Temporal features
+        features["hour"] = forecast_time.hour
+        features["day_of_week"] = forecast_time.weekday()
+        features["month"] = forecast_time.month
+        # Historical PM10 features
+        recent_history = history_df[history_df["timestamp"] <= forecast_time]
+        if not recent_history.empty:
+            features["pm10_lag1"] = recent_history["pm10"].iloc[-1] if len(recent_history) >= 1 else 0.0
+            features["pm10_lag2"] = recent_history["pm10"].iloc[-2] if len(recent_history) >= 2 else 0.0
+            features["pm10_lag3"] = recent_history["pm10"].iloc[-3] if len(recent_history) >= 3 else 0.0
+            features["pm10_mean"] = recent_history["pm10"].mean()
+        else:
+            features["pm10_lag1"] = 0.0
+            features["pm10_lag2"] = 0.0
+            features["pm10_lag3"] = 0.0
+            features["pm10_mean"] = 0.0
+        # Weather features
+        relevant_weather = [w for w in weather_data if w.get("date") and
+                          pd.to_datetime(w["date"]) <= forecast_time]
+        weather_features = parse_metar_weather(relevant_weather[-1] if relevant_weather else {})
+        features.update(weather_features)
+        # Land-use features
+        landuse_features = extract_landuse_features(landuse_data, target_lat, target_lon)
+        features.update(landuse_features)
+        # Spatial features
+        distance_features = get_station_distances(target_lat, target_lon)
+        features.update(distance_features)
+
+        # Create feature vector
+        X = pd.DataFrame([features])
+        # Add missing features with default values
+        for col in feature_names:
+            if col not in X.columns:
+                X[col] = 0.0
+        X = X[feature_names]  # Ensure correct order
+        # Scale features
+        X_scaled = scaler.transform(X)
+        # Predict
+        pm10_pred_scaled = model.predict(X_scaled)[0]
+        # Inverse transform prediction
+        pm10_pred = scaler_y.inverse_transform([[pm10_pred_scaled]])[0][0]
+        pm10_pred = max(0, float(pm10_pred))  # Ensure non-negative
+
+        # Format output
+        ts = forecast_time.strftime("%Y-%m-%dT%H:%M:%SZ")
         forecast_list.append({
             "timestamp": ts,
-            "pm10_pred": pm10_pred
+            "pm10_pred": round(pm10_pred, 1)
         })
+
+    if len(forecast_list) != 24:
+        raise ValueError(f"Forecast must contain exactly 24 hours, got {len(forecast_list)}")
     return forecast_list
 
 
