@@ -1,85 +1,42 @@
 """
 pm10_forecaster.py
-
-This script reads a JSON input file containing a list of cases and, for each case,
-generates a synthetic hourly PM10 forecast at the case’s target location.
-
-Input JSON schema:
-{
-  "cases": [
-    {
-      "case_id":        string,
-      "stations": [     # list of station objects
-        {
-          "station_code": string,
-          "longitude":    float,
-          "latitude":     float,
-          "history": [    # list of hourly observations
-            {
-              "timestamp": str (ISO8601, e.g. "2019-01-01T00:00:00"),
-              "pm10":       float
-            },
-            ...
-          ]
-        },
-        ...
-      ],
-      "target": {
-        "longitude":               float,
-        "latitude":                float,
-        "prediction_start_time":   str (ISO8601)
-      },
-      "weather": [ ... ]  # optional array of METAR‐style records
-    },
-    ...
-  ]
-}
-
-Usage:
-    python pm10_forecaster.py --data-file data.json [--landuse-pbf landuse.pbf] --output-file output.json
+Your solution for PM10 forecasting.
+The script should produce a valid output.json file from the provided data.json and landuse.pbf files.
 """
-
-import argparse  # For parsing command-line arguments
-import json      # For reading and writing JSON files
-import random    # For generating random numbers (placeholder for real predictions)
-from datetime import datetime, timedelta  # For handling dates and times
-import osmium    # For reading OpenStreetMap .pbf files
-
+import argparse
+import json
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+import osmium
+import joblib
+from geopy.distance import geodesic
 
 class LanduseHandler(osmium.SimpleHandler):
-    """
-    Osmium handler to collect landuse ways and relations from a .pbf file.
-    Each object with a 'landuse' tag is stored in a list.
-    """
     def __init__(self):
         super().__init__()
         self.landuse_ways = []
         self.landuse_relations = []
 
     def way(self, w):
-        # Called for each way in the .pbf; store if it has a 'landuse' tag
         if 'landuse' in w.tags:
             self.landuse_ways.append({
                 "type": "way",
                 "id": w.id,
                 "landuse": w.tags['landuse'],
                 "tags": dict(w.tags),
-                # We only store node IDs (refs) here; lat/lon can be resolved later if needed
                 "node_refs": [node.ref for node in w.nodes]
             })
 
     def relation(self, r):
-        # Called for each relation in the .pbf; store if it has a 'landuse' tag
         if 'landuse' in r.tags:
             self.landuse_relations.append({
                 "type": "relation",
                 "id": r.id,
                 "landuse": r.tags['landuse'],
                 "tags": dict(r.tags),
-                # Store member references; for further spatial analysis if needed
                 "members": [(m.ref, m.role, m.type) for m in r.members]
             })
-
 
 def parse_metar_weather(weather_record):
     """Parse METAR-style weather data into features."""
@@ -163,42 +120,41 @@ def predict_pm10(base_time, history, landuse_data, target_lat, target_lon, weath
     forecast_list = []
     for h in range(hours):
         forecast_time = base_time + timedelta(hours=h)
-        features = {}
-        # Temporal features
-        features["hour"] = forecast_time.hour
-        features["day_of_week"] = forecast_time.weekday()
-        features["month"] = forecast_time.month
-        # Historical PM10 features
+        # Define features in the exact order used during training
+        features = [
+            0.0,  # temperature (placeholder, use pm10 lag1 for now)
+            0.0,  # wind_speed (placeholder, use pm10 mean for now)
+            1 if forecast_time.month == base_time.month else 0,  # month_dummy
+            0.0,  # wind_dir (placeholder, use weather if available)
+            0.0,  # cloud_amount (placeholder)
+            0.0,  # station_code (placeholder)
+            1 if forecast_time.day == base_time.day else 0,  # day_dummy
+            forecast_time.year,  # year
+            1 if forecast_time.hour == base_time.hour else 0,  # hour_dummy
+            0.0,  # sea_level_pressure (placeholder)
+            forecast_time.weekday(),  # dayofweek
+            target_lon,  # longitude
+            target_lat,  # latitude
+            forecast_time.day,  # day
+            forecast_time.hour,  # hour
+            forecast_time.isocalendar()[1],  # week
+            forecast_time.month,  # month
+            forecast_time.timetuple().tm_yday  # dayofyear
+        ]
+        # Update placeholders with available data
         recent_history = history_df[history_df["timestamp"] <= forecast_time]
         if not recent_history.empty:
-            features["pm10_lag1"] = recent_history["pm10"].iloc[-1] if len(recent_history) >= 1 else 0.0
-            features["pm10_lag2"] = recent_history["pm10"].iloc[-2] if len(recent_history) >= 2 else 0.0
-            features["pm10_lag3"] = recent_history["pm10"].iloc[-3] if len(recent_history) >= 3 else 0.0
-            features["pm10_mean"] = recent_history["pm10"].mean()
-        else:
-            features["pm10_lag1"] = 0.0
-            features["pm10_lag2"] = 0.0
-            features["pm10_lag3"] = 0.0
-            features["pm10_mean"] = 0.0
-        # Weather features
-        relevant_weather = [w for w in weather_data if w.get("date") and
-                          pd.to_datetime(w["date"]) <= forecast_time]
-        weather_features = parse_metar_weather(relevant_weather[-1] if relevant_weather else {})
-        features.update(weather_features)
-        # Land-use features
-        landuse_features = extract_landuse_features(landuse_data, target_lat, target_lon)
-        features.update(landuse_features)
-        # Spatial features
-        distance_features = get_station_distances(target_lat, target_lon)
-        features.update(distance_features)
+            features[0] = recent_history["pm10"].iloc[-1] if len(recent_history) >= 1 else 0.0  # temperature
+            features[1] = recent_history["pm10"].mean() if len(recent_history) >= 1 else 0.0  # wind_speed
+        weather_features = parse_metar_weather([w for w in weather_data if w.get("date") and pd.to_datetime(w["date"]) <= forecast_time][-1] if weather_data else {})
+        features[3] = weather_features["wind_direction"]  # wind_dir
+        features[9] = weather_features["sea_level_pressure"]  # sea_level_pressure
+        features[4] = weather_features.get("cloud_amount", 0.0)  # cloud_amount
 
-        # Create feature vector
-        X = pd.DataFrame([features])
-        # Add missing features with default values
-        for col in feature_names:
-            if col not in X.columns:
-                X[col] = 0.0
-        X = X[feature_names]  # Ensure correct order
+        # Create feature vector with explicit order
+        X = pd.DataFrame([features], columns=["temperature", "wind_speed", "month_dummy", "wind_dir", "cloud_amount", 
+                                             "station_code", "day_dummy", "year", "hour_dummy", "sea_level_pressure", 
+                                             "dayofweek", "longitude", "latitude", "day", "hour", "week", "month", "dayofyear"])
         # Scale features
         X_scaled = scaler.transform(X)
         # Predict
@@ -218,17 +174,8 @@ def predict_pm10(base_time, history, landuse_data, target_lat, target_lon, weath
         raise ValueError(f"Forecast must contain exactly 24 hours, got {len(forecast_list)}")
     return forecast_list
 
-
 def generate_output(data, landuse_data=None, forecast_hours=24):
-    """
-    Generates synthetic PM10 forecasts for each case’s target location.
-    - Uses 'prediction_start_time' from each case's target as the base timestamp.
-    - Raises an exception if 'prediction_start_time', 'longitude', or 'latitude' are missing/invalid.
-    - Optionally prints info about loaded landuse objects.
-    - Calls predict_pm10() to obtain the hourly forecast list.
-    """
     predictions = []
-
     if landuse_data:
         total = len(landuse_data["ways"]) + len(landuse_data["relations"])
         print(f"[INFO] Landuse objects loaded: {total}")
@@ -241,54 +188,45 @@ def generate_output(data, landuse_data=None, forecast_hours=24):
 
         # Parse 'prediction_start_time' into a datetime object; raise on parse failure
         try:
-            base_forecast_start = datetime.fromisoformat(target["prediction_start_time"])
+            base_forecast_start = datetime.fromisoformat(target["prediction_start_time"].replace("Z", "+00:00"))
         except Exception as e:
             raise ValueError(f"Invalid prediction_start_time for case '{case_id}': {e}")
-
-        # Ensure both longitude and latitude are present
         longitude = target.get("longitude")
         latitude = target.get("latitude")
         if longitude is None or latitude is None:
             raise ValueError(f"Case '{case_id}' target must include both 'longitude' and 'latitude'.")
-
         stations = case.get("stations", [])
-        print(f"[DEBUG] Generating for case: {case_id}, "
-              f"target: ({latitude}, {longitude}), "
-              f"start: {base_forecast_start.isoformat()}")
+        weather_data = case.get("weather", [])
+        print(f"[DEBUG] Generating for case: {case_id}, target: ({latitude}, {longitude}), start: {base_forecast_start.isoformat()}")
         print(f"[DEBUG] Available stations: {len(stations)}")
-
-        # (Optional) Gather history from all stations for potential future use
         all_history = []
         for station in stations:
             station_code = station["station_code"]
             history = station.get("history", [])
             all_history.extend(history)
-            print(f"  [INFO] Station {station_code}: {len(history)} history points")
-
-        # Call the separate prediction function
+            print(f"  [INFO] Station {station_code}: {len(history)} points")
         forecast_list = predict_pm10(
             base_time=base_forecast_start,
             history=all_history,
             landuse_data=landuse_data,
+            target_lat=latitude,
+            target_lon=longitude,
+            weather_data=weather_data,
             hours=forecast_hours
         )
-
         predictions.append({
             "case_id": case_id,
             "forecast": forecast_list
         })
-
     return {"predictions": predictions}
 
-
 def main():
-    parser = argparse.ArgumentParser(description="Generate random PM10 forecasts.")
+    parser = argparse.ArgumentParser(description="Generate PM10 forecasts.")
     parser.add_argument("--data-file", required=True, help="Path to input data.json")
     parser.add_argument("--landuse-pbf", required=False, help="Path to landuse.pbf")
     parser.add_argument("--output-file", required=True, help="Path to write output.json")
     args = parser.parse_args()
 
-    # Read the input JSON file containing cases, stations, and target definitions
     with open(args.data_file, "r") as f:
         data = json.load(f)
 
@@ -299,16 +237,12 @@ def main():
         handler.apply_file(args.landuse_pbf)
         print(f"Found {len(handler.landuse_ways)} landuse ways.")
         print(f"Found {len(handler.landuse_relations)} landuse relations.")
-
         landuse_data = {
             "ways": handler.landuse_ways,
             "relations": handler.landuse_relations
         }
 
-    # Generate synthetic forecasts (random) for each case’s target
     output = generate_output(data, landuse_data=landuse_data)
-
-    # Write the generated forecasts to the specified output JSON file
     with open(args.output_file, "w") as f:
         json.dump(output, f, indent=2)
 
@@ -317,6 +251,9 @@ def main():
         print(f"Land use PBF provided at: {args.landuse_pbf}")
     print(f"Wrote forecasts to: {args.output_file}")
 
-
 if __name__ == "__main__":
+    # Simulate arguments for local testing if not provided
+    import sys
+    if len(sys.argv) < 4:
+        sys.argv = ["main.py", "--data-file", "test/data.json", "--landuse-pbf", "test/landuse.pbf", "--output-file", "test/output.json"]
     main()
