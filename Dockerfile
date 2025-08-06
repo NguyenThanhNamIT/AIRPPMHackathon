@@ -4,8 +4,11 @@ FROM python:3.9-slim
 # Set working directory
 WORKDIR /app
 
-# Copy the forecasting script into the container
+# Copy required files and folders only
 COPY main.py .
+COPY requirements.txt .
+COPY models/ models/
+COPY text/ text/
 
 
 # Install system dependencies required by osmium

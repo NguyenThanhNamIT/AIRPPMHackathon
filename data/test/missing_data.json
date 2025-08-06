@@ -1,0 +1,52 @@
+{
+
+  "cases": [
+
+    {
+
+      "case_id": "case_0001",
+
+      "stations": [
+
+        {
+
+          "station_code": "StationA",
+
+          "longitude": -74.0060,
+
+          "latitude": 40.7128,
+
+          "history": [
+
+            { "timestamp": "2025-01-01T00:00:00", "pm10": 42.5 },
+
+            { "timestamp": "2025-01-01T01:00:00", "pm10": 38.1 }
+
+          ]
+
+        }
+
+      ],
+
+      "target": {
+
+        "longitude": -74.0060,
+
+        "latitude": 40.7128,
+         
+        "prediction_start_time": "2025/01/03T00:00:00"
+
+      },
+
+      "weather": [
+
+        { "date": "2025-01-01T00:00:00", "tmp": "+0050,1", "wnd": "260,1,N,0030,1" }
+
+      ]
+
+    }
+
+  ]
+
+}
+

@@ -44,7 +44,19 @@ import json      # For reading and writing JSON files
 import random    # For generating random numbers (placeholder for real predictions)
 from datetime import datetime, timedelta  # For handling dates and times
 import osmium    # For reading OpenStreetMap .pbf files
+import joblib
+import pandas as pd
 
+
+scaler_X = joblib.load("/app/models/scaler_xgb_X.joblib")
+
+MODEL = joblib.load("/app/models/xgboost_pm10_model.joblib")
+
+with open("/app/data/test/data.json", "r") as f:
+    data = json.load(f)
+
+# If you use landuse data:
+landuse_path = "/app/data/test/landuse.pbf"
 
 class LanduseHandler(osmium.SimpleHandler):
     """
@@ -81,26 +93,78 @@ class LanduseHandler(osmium.SimpleHandler):
             })
 
 
+def parse_weather_from_history(history):
+    """
+    Extract weather info (temperature, wind_dir, wind_speed, etc.) from the most recent entry in history.
+    """
+    if not history:
+        return {
+            "wind_dir": 0.0,
+            "wind_speed": 0.0,
+            "temperature": 0.0,
+            "sea_level_pressure": 0.0,
+            "cloud_amount": 0.0,
+        }
+
+    last = history[-1]
+    return {
+        "wind_dir": last.get("wind_dir", 0.0),
+        "wind_speed": last.get("wind_speed", 0.0),
+        "temperature": last.get("temperature", 0.0),
+        "sea_level_pressure": last.get("sea_level_pressure", 0.0),
+        "cloud_amount": last.get("cloud_amount", 0.0),
+    }
+
 def predict_pm10(base_time, history, landuse_data, hours=24):
     """
-    Placeholder function to generate a PM10 forecast for a target location.
-    - base_time: datetime from which to start predictions
-    - history: list of historical PM10 records (unused in this placeholder)
-    - landuse_data: optional landuse info (unused in this placeholder)
-    - hours: number of hourly predictions to generate
-    Returns a list of dictionaries with 'timestamp' and 'pm10_pred'.
+    Predict 24-hour PM10 using XGBoost and 18 engineered features.
     """
     forecast_list = []
+
+    # Ensure history is sorted by timestamp
+    history = sorted(history, key=lambda x: x["timestamp"])
+    last_pm10 = history[-1]["pm10"] if history else 0.0
+    weather_feats = parse_weather_from_history(history)
+
+    # Get lat/lon from last record (or landuse_data if needed)
+    latitude = history[-1].get("latitude", 0.0)
+    longitude = history[-1].get("longitude", 0.0)
+
     for h in range(hours):
-        ts = (base_time + timedelta(hours=h)).strftime("%Y-%m-%dT%H:%MZ")
-        # Generate a random PM10 value between 0 and 100 (put your logic here)
-        # TODO: replace this random placeholder with your PM10 prediction model
-        pm10_pred = round(random.uniform(0, 100), 1)
+        ts = base_time + timedelta(hours=h)
+
+        # Build feature dictionary
+        feature_dict = {
+            "year": ts.year,
+            "dayofyear": ts.timetuple().tm_yday,
+            "hour": ts.hour,
+            "week": ts.isocalendar()[1],
+            "month": ts.month,
+            "dayofweek": ts.weekday(),
+            "day": ts.day,
+            "month_dummy": ts.month,
+            "hour_dummy": ts.hour,
+            "day_dummy": ts.day,
+            "station_code": 1,              # Replace with proper encoding if needed
+            "latitude": latitude,
+            "longitude": longitude,
+            **weather_feats
+        }
+
+        # Convert to DataFrame and scale
+        df = pd.DataFrame([feature_dict])
+        X_scaled = scaler_X.transform(df)
+
+        # Predict
+        y_pred = MODEL.predict(X_scaled)[0]
+
         forecast_list.append({
-            "timestamp": ts,
-            "pm10_pred": pm10_pred
+            "timestamp": ts.strftime("%Y-%m-%dT%H:%MZ"),
+            "pm10_pred": float(y_pred)
         })
+
     return forecast_list
+
 
 
 def generate_output(data, landuse_data=None, forecast_hours=24):
@@ -156,6 +220,11 @@ def generate_output(data, landuse_data=None, forecast_hours=24):
             landuse_data=landuse_data,
             hours=forecast_hours
         )
+
+        # Exit if forecast is empty
+        if not forecast_list:
+            print(f"[ERROR] Prediction failed or empty for case '{case_id}'", file=sys.stderr)
+            sys.exit(1)
 
         predictions.append({
             "case_id": case_id,
