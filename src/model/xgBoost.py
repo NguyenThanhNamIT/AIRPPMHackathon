@@ -4,6 +4,7 @@ from xgboost import XGBRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score,  accuracy_score
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 train_df = pd.read_csv("../../data/xgboost_data/xgb_train_scaled.csv")
 test_df = pd.read_csv("../../data/xgboost_data/xgb_test_scaled.csv")
@@ -16,17 +17,17 @@ X_test = test_df.drop(columns=[target_column])
 y_test = test_df[target_column]
 
 model = XGBRegressor(
-      n_estimators=5000,
-            early_stopping_rounds=1000,
+      n_estimators=1000,
+            early_stopping_rounds=50,
             objective='reg:squarederror',
             eval_metric=['rmse'],
             learning_rate=0.1,
-            reg_alpha=0,
-            reg_lambda=0.1,
-            min_child_weight=0,
-            max_depth=6,
-            subsample=1,
-            colsample_bytree=1,
+            reg_alpha=0.5,
+            reg_lambda=1.0,
+            min_child_weight=3,
+            subsample=0.8,
+            colsample_bytree=0.8,
+
             random_state=2025
 )
 
@@ -45,7 +46,6 @@ r2 = r2_score(y_test, y_pred)
 print(f"MAE:  {mae:.3f}")
 print(f"MSE: {mse:.3f}")
 print(f"R²:   {r2:.3f}")
-
 
 y_test_pred = y_pred
 model_name = "XGBoost"
@@ -66,3 +66,4 @@ plt.ylabel(target_name)
 plt.grid(True)
 plt.tight_layout()
 plt.show()
+
