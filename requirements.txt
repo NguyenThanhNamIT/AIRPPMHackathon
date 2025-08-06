@@ -1,7 +1,7 @@
-pandas==2.2.2
-numpy==1.26.4
-xgboost==2.1.1
-scikit-learn==1.5.2
+osmium~=4.0.2
+pandas>=1.3.0
+numpy>=1.21.0
+seaborn>=0.11.0
+scikit-learn>=0.24.0
 joblib==1.4.2
-geopy==2.4.1
-osmium
+xgboost
