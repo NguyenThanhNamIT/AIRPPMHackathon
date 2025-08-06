@@ -27,7 +27,7 @@ catboost_model = CatBoostRegressor(
     subsample=0.8,
     rsm=1.0,
     min_data_in_leaf=3,
-    verbose=100
+   
 )
 catboost_model.fit(X_train, y_train, eval_set=(X_test, y_test))
 
