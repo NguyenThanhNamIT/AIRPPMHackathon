@@ -39,7 +39,7 @@ pip install -r requirements.txt
 ```
 # Required Data Files for Docker file (Competition_Requirement)
 
-## landuse.pbf
+# landuse.pbf
 This file is required but too large for GitHub (102.87 MB).
 
 **Download Instructions:**
@@ -64,7 +64,7 @@ This file is required but too large for GitHub (102.87 MB).
     ├── data.json                   # Input file (mounted during evaluation)
     └── landuse.pbf                 # Optional landuse data (mounted during evaluation)
 ```
-### Paths Used Inside Docker
+## Paths Used Inside Docker
 
 The code uses fixed absolute paths inside the container to comply with the competition requirements:
 
@@ -118,7 +118,7 @@ To run the Docker container locally, ensure `missing_data.json` and `landuse.pbf
 
 ```bash
 docker run --rm -v "$(Get-Location):/app" -w /app my-pm10-image `
->>   --data-file data/test/data.json `
+>>   --data-file data/test/missing_data.json `
 >>   --output-file output.json `
 >>   --landuse-pbf data/test/landuse.pbf
 ```
