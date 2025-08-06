@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from xgboost import XGBRegressor
+from sklearn.svm import SVR
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score,  accuracy_score
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -15,31 +15,13 @@ y_train = train_df[target_column]
 X_test = test_df.drop(columns=[target_column])
 y_test = test_df[target_column]
 
-model = XGBRegressor(
-      n_estimators=5000,
-            early_stopping_rounds=1000,
-            objective='reg:squarederror',
-            eval_metric=['rmse'],
-            learning_rate=0.1,
-            reg_alpha=0,
-            reg_lambda=0.1,
-            min_child_weight=0,
-            max_depth=6,
-            subsample=1,
-            colsample_bytree=1,
-            random_state=2025
-)
 
-model.fit(
-    X_train, y_train,
-    eval_set=[(X_test, y_test)],
-    verbose=False
-)
-
-y_pred = model.predict(X_test)
+svr = SVR(kernel='rbf', C= 1.0, epsilon=0.1, verbose=True)
+svr.fit(X_train, y_train)
+y_pred = svr.predict(X_test)
 
 mae = mean_absolute_error(y_test, y_pred)
-mse = mean_squared_error(y_test, y_pred)
+mse = np.sqrt(mean_squared_error(y_test, y_pred))
 r2 = r2_score(y_test, y_pred)
 
 print(f"MAE:  {mae:.3f}")
@@ -48,7 +30,7 @@ print(f"R²:   {r2:.3f}")
 
 
 y_test_pred = y_pred
-model_name = "XGBoost"
+model_name = "SVM"
 target_name = "PM10"
 
 plt.figure(figsize=(14, 5))
