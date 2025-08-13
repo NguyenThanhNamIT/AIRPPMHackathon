@@ -59,7 +59,6 @@ This file is required but too large for GitHub (102.87 MB).
 │   └── xgboost_pm10_model.joblib   # Trained XGBoost regression model
 ├── Dockerfile                      # Docker build script
 ├── requirements.txt                # Python dependencies
-├── data/
 └── test/
     ├── data.json                   # Input file (mounted during evaluation)
     └── landuse.pbf                 # Optional landuse data (mounted during evaluation)
